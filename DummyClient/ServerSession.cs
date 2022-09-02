@@ -5,23 +5,65 @@ using ServerCore;
 
 namespace DummyClient
 {
-    class Packet
+    public abstract class Packet
     {
         public ushort size;
         public ushort packetid;
+
+        public abstract ArraySegment<byte> Write();
+        public abstract void Read(ArraySegment<byte> s);
     }
 
     // 클라가 서버에게 특정 플레이어의 정보 요청
     class PlayerInfoReq : Packet
     {
         public long playerId;
-    }
 
-    // 서버에게 받은 플레이어 정보
-    class PlayerInfoOk : Packet
-    {
-        public int hp;
-        public int attack;
+        public PlayerInfoReq()
+        {
+            this.packetid = (ushort)PacketID.PlayerInfoReq;
+        }
+
+        public override void Read(ArraySegment<byte> s)
+        {
+
+            ushort count = 0;
+
+            // 요까지 왔다는 건 이미 패킷이 PlayerInfoReq인걸 알고 있다는 거
+            //ushort size = BitConverter.ToUInt16(s.Array, s.Offset);
+            count += 2;
+            //ushort id = BitConverter.ToUInt16(s.Array, s.Offset + count);
+            count += 2;
+
+
+            this.playerId = BitConverter.ToInt64(new ReadOnlySpan<byte>(s.Array, s.Offset + count, s.Count - count));
+            // 서버는 항상 클라가 거짓말 하고 있다고 생각해야함
+            // 패킷 헤더에 있는 정보는 참고만 하자
+            // 그래서 데이터를 읽으려고 할때도 유효 범위만 읽어야 하니까 리드온리 스판으로 슈슈슉 하는거임
+            // 근데 패킷에서 사이즈 정보는 왜 보내냐? 그래도 반은 믿어주는거임
+            count += 8;
+        }
+
+        public override ArraySegment<byte> Write()
+        {
+            ArraySegment<byte> s = SendBufferHelper.Open(4096);
+
+            ushort count = 0;
+            bool success = true;
+
+            count += 2;
+            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), this.packetid);
+            count += 2;
+            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), this.playerId);
+            count += 8;
+
+            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset, s.Count), count);
+            if (success == false)
+                return null;
+
+
+            return SendBufferHelper.Close(count);
+        }
     }
 
     public enum PacketID
@@ -46,39 +88,13 @@ namespace DummyClient
         {
             Console.WriteLine($"OnConnected: {endPoint}");
 
-            PlayerInfoReq packet = new PlayerInfoReq() { packetid = (ushort)PacketID.PlayerInfoReq, playerId = 1001 };
+            PlayerInfoReq packet = new PlayerInfoReq() { playerId = 1001 };
 
 
-            // 보내기
+            ArraySegment<byte> s = packet.Write();
 
-            //for (int i = 0; i < 5; i++)
-            {
-                ArraySegment<byte> s = SendBufferHelper.Open(4096);
-
-                // 바이트 배열을 만들면 내부적으로는 동적 배열을 만들게 되니까 불-편
-                // 그럼 BitConverter.TryWriteBytes(new Span<byte>(byte[] array, int start, int length) 써보자
-
-                ushort count = 0;
-                bool success = true;
-
-
-                // 놀라운 사실 ㄴㅇㄱ 사실 패킷의 사이즈는 패킷 포장이 전부 끝날 때 까지 알 수 없었던 거임 ㄷ
-                //success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset, s.Count), packet.size);
-                count += 2;
-                success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), packet.packetid);
-                count += 2;
-                success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), packet.playerId);
-                count += 8;
-
-                success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset, s.Count), count);
-
-
-                ArraySegment<byte> sendBuff = SendBufferHelper.Close(count);
-
-                if (success)
-                    Send(sendBuff);
-
-            }
+            if (s != null)
+                Send(s);
 
         }
 

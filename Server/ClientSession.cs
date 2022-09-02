@@ -5,24 +5,62 @@ using ServerCore;
 
 namespace Server
 {
-
-    class Packet
+    public abstract class Packet
     {
         public ushort size;
         public ushort packetid;
+
+        public abstract ArraySegment<byte> Write();
+        public abstract void Read(ArraySegment<byte> s);
     }
 
     // 클라가 서버에게 특정 플레이어의 정보 요청
     class PlayerInfoReq : Packet
     {
         public long playerId;
-    }
 
-    // 서버에게 받은 플레이어 정보
-    class PlayerInfoOk : Packet
-    {
-        public int hp;
-        public int attack;
+        public PlayerInfoReq()
+        {
+            this.packetid = (ushort)PacketID.PlayerInfoReq;
+        }
+
+        public override void Read(ArraySegment<byte> s)
+        {
+
+            ushort count = 0;
+
+            // 요까지 왔다는 건 이미 패킷이 PlayerInfoReq인걸 알고 있다는 거
+            //ushort size = BitConverter.ToUInt16(s.Array, s.Offset);
+            count += 2;
+            //ushort id = BitConverter.ToUInt16(s.Array, s.Offset + count);
+            count += 2;
+
+
+            this.playerId = BitConverter.ToInt64(new ReadOnlySpan<byte>(s.Array, s.Offset + count, s.Count - count));
+            count += 8;
+        }
+
+        public override ArraySegment<byte> Write()
+        {
+            ArraySegment<byte> s = SendBufferHelper.Open(4096);
+
+            ushort count = 0;
+            bool success = true;
+
+            count += 2;
+            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), this.packetid);
+            count += 2;
+            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), this.playerId);
+            count += 8;
+
+            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset, s.Count), count);
+
+            if (success == false)
+                return null;
+
+
+            return SendBufferHelper.Close(count);
+        }
     }
 
     public enum PacketID
@@ -37,28 +75,6 @@ namespace Server
         public override void OnConnected(EndPoint endPoint)
         {
             Console.WriteLine($"OnConnected: {endPoint}");
-
-            /*Packet packet = new Packet() { size = 100, packetid = 10 };
-
-
-            // send는 왜 외부에서 비트를 만들어서 보낼까
-            // 그 이유는 성능 이슈가 있어서 그렇다
-            // 내부에다 만들면 버퍼를 만번씩 복사를 해야 한다
-            // 버퍼 사이즈라도 정할 수 있을까? 8바이트 옮기는데 1024바이트는 비효율적이니까
-            // 그치만 할 수 없는 이유는 보내는 정보에 가변 정보(리스트 )이 있을 수 있기 때문이다
-            // 대신 버퍼 하나 큰 거를 할당하고 야금야금 잘라서 쓰게 만들면 좋다
-
-            ArraySegment<byte> openSegment = SendBufferHelper.Open(4096);
-
-            byte[] buffer = BitConverter.GetBytes(packet.size);
-            byte[] buffer2 = BitConverter.GetBytes(packet.packetid);
-            Array.Copy(buffer, 0, openSegment.Array, openSegment.Offset, buffer.Length);
-            Array.Copy(buffer2, 0, openSegment.Array, openSegment.Offset + buffer.Length, buffer2.Length);
-            ArraySegment<byte> sendBuff = SendBufferHelper.Close(buffer.Length + buffer2.Length);
-
-
-
-            Send(sendBuff);*/
             Thread.Sleep(5000);
             DisConnect();
 
@@ -82,9 +98,9 @@ namespace Server
             {
                 case PacketID.PlayerInfoReq:
                     {
-                        long playerId = BitConverter.ToInt64(buffer.Array, buffer.Offset + count);
-                        count += 8;
-                        Console.WriteLine($"PlayerInfoReq: {playerId}");
+                        PlayerInfoReq p = new PlayerInfoReq();
+                        p.Read(buffer);
+                        Console.WriteLine($"PlayerInfoReq: {p.playerId}");
                     }
                     break;
 
