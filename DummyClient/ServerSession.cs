@@ -14,50 +14,75 @@ namespace DummyClient
         public abstract void Read(ArraySegment<byte> s);
     }
 
-    // 클라가 서버에게 특정 플레이어의 정보 요청
     class PlayerInfoReq : Packet
     {
         public long playerId;
+        public string name;
+        // 가변적 크기를 갖는 스트링 주고받기
 
         public PlayerInfoReq()
         {
             this.packetid = (ushort)PacketID.PlayerInfoReq;
         }
 
-        public override void Read(ArraySegment<byte> s)
+        public override void Read(ArraySegment<byte> segment)
         {
 
             ushort count = 0;
 
-            // 요까지 왔다는 건 이미 패킷이 PlayerInfoReq인걸 알고 있다는 거
-            //ushort size = BitConverter.ToUInt16(s.Array, s.Offset);
-            count += 2;
-            //ushort id = BitConverter.ToUInt16(s.Array, s.Offset + count);
-            count += 2;
+            ReadOnlySpan<byte> s = new ReadOnlySpan<byte>(segment.Array, segment.Offset, segment.Count);
+
+            count += sizeof(ushort);
+            count += sizeof(ushort);
 
 
-            this.playerId = BitConverter.ToInt64(new ReadOnlySpan<byte>(s.Array, s.Offset + count, s.Count - count));
-            // 서버는 항상 클라가 거짓말 하고 있다고 생각해야함
-            // 패킷 헤더에 있는 정보는 참고만 하자
-            // 그래서 데이터를 읽으려고 할때도 유효 범위만 읽어야 하니까 리드온리 스판으로 슈슈슉 하는거임
-            // 근데 패킷에서 사이즈 정보는 왜 보내냐? 그래도 반은 믿어주는거임
-            count += 8;
+            this.playerId = BitConverter.ToInt64(s.Slice(count, s.Length - count));
+            count += sizeof(long);
+
+            // string
+            // nameLen 도 공격감지해야됨
+            ushort nameLen = BitConverter.ToUInt16(s.Slice(count, s.Length - count));
+            count += sizeof(ushort);
+
+            this.name = Encoding.Unicode.GetString(s.Slice(count, nameLen));
         }
 
         public override ArraySegment<byte> Write()
         {
-            ArraySegment<byte> s = SendBufferHelper.Open(4096);
+            ArraySegment<byte> segment = SendBufferHelper.Open(4096);
 
             ushort count = 0;
             bool success = true;
 
-            count += 2;
-            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), this.packetid);
-            count += 2;
-            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset + count, s.Count - count), this.playerId);
-            count += 8;
+            Span<byte> s = new Span<byte>(segment.Array, segment.Offset, segment.Count);
+            // trywrite 할때마다 뉴 스판 하면 불편하니까 슬라이스로 변경
+            // 슬라이스하면 리턴으로 결과값 뱉어줘서 가능
 
-            success &= BitConverter.TryWriteBytes(new Span<byte>(s.Array, s.Offset, s.Count), count);
+            count += sizeof(ushort);
+            success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), this.packetid);
+            count += sizeof(ushort);
+            success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), this.playerId);
+            count += sizeof(long);
+
+            // string utf16을 써보자 C#은 utf16을 기본으로 사용하기도 함
+            // C++ 은 문자열 끝이 0x 00 00 으로 끝나지만 C#은 그러지 않음
+            // string len[2] -> byte[] 이렇게 ushort로 사이즈를 먼저 보내주고 스트링 쓰기
+            // 그치만.. 문자열의 길이를 구하는데 string.length를 쓰면 byte배열의 크기랑 안맞게 돼버림(ABCD는 문자열로 4바이트 byte배열로는 8바이트)
+            /// ushort nameLen = (ushort) Encoding.Unicode.GetByteCount(this.name);
+            // 이러면 되지롱~
+            /// success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), nameLen);
+            /// count += sizeof(ushort);
+            // Array.Copy(Encoding.Unicode.GetBytes(this.name), 0, segment.Array, count, nameLen);
+            // 싸늘하니까 츄라이문으로 바꾸기
+            // 먼저 꺼는 길이 파악 -> 복사 방식인데 이번엔 냅따 복사 후에 사이즈 적어주기
+            ushort nameLen = (ushort) Encoding.Unicode.GetBytes(this.name, 0, this.name.Length, segment.Array, segment.Offset + count + sizeof(ushort));
+            success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), nameLen);
+            count += sizeof(ushort);
+            count += nameLen;
+
+            success &= BitConverter.TryWriteBytes(s, count);
+
+
             if (success == false)
                 return null;
 
@@ -72,23 +97,14 @@ namespace DummyClient
         PlayerInfoOk = 2,
     }
 
-    // 컨텐츠 단에서 하는게 아니라 안에서 하게 만들기
+
     class ServerSession : Session
     {
-        /*
-        // unsafe를 사용하면 c#에선 건들지 못했던 포인터를 건들 수 있게됨
-        static unsafe void ToBytes(byte[] array, int offset, ulong value)
-        {
-            fixed (byte* ptr = &array[offset])
-                *(ulong*)ptr = value;
-        }*/
-
-
         public override void OnConnected(EndPoint endPoint)
         {
             Console.WriteLine($"OnConnected: {endPoint}");
 
-            PlayerInfoReq packet = new PlayerInfoReq() { playerId = 1001 };
+            PlayerInfoReq packet = new PlayerInfoReq() { playerId = 1001, name="ABCD"};
 
 
             ArraySegment<byte> s = packet.Write();
