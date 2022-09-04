@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Text;
 using System.Threading;
@@ -19,7 +20,43 @@ namespace Server
     {
         public long playerId;
         public string name;
-        // 가변적 크기를 갖는 스트링 주고받기
+
+        public struct SkillInfo
+        {
+            public int id;
+            public short level;
+            public float duration;
+
+            // 쓰고 있던 데이터 s와 count
+            public bool Write(Span<byte> s, ref ushort count)
+            {
+                bool success = true;
+
+                success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), id);
+                count += sizeof(int);
+                success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), level);
+                count += sizeof(short);
+                success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), duration);
+                count += sizeof(float);
+
+                return success;
+            }
+
+            public void Read(ReadOnlySpan<byte> s, ref ushort count)
+            {
+                id = BitConverter.ToInt32(s.Slice(count, s.Length - count));
+                count += sizeof(int);
+                level = BitConverter.ToInt16(s.Slice(count, s.Length - count));
+                count += sizeof(short);
+                duration = BitConverter.ToSingle(s.Slice(count, s.Length - count));
+                count += sizeof(float);
+            }
+        }
+
+        public List<SkillInfo> skills = new List<SkillInfo>();
+
+        // 복잡한 구조체 리스트는 어떻게 처리할 것인가
+
 
         public PlayerInfoReq()
         {
@@ -46,6 +83,18 @@ namespace Server
             count += sizeof(ushort);
 
             this.name = Encoding.Unicode.GetString(s.Slice(count, nameLen));
+            count += nameLen;
+
+            // skill list
+            skills.Clear();
+            ushort skillLen = BitConverter.ToUInt16(s.Slice(count, s.Length - count));
+            count += sizeof(ushort);
+            for (int i = 0; i < skillLen; i++)
+            {
+                SkillInfo skill = new SkillInfo();
+                skill.Read(s, ref count);
+                skills.Add(skill);
+            }
         }
 
         public override ArraySegment<byte> Write()
@@ -65,23 +114,23 @@ namespace Server
             success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), this.playerId);
             count += sizeof(long);
 
-            // string utf16을 써보자 C#은 utf16을 기본으로 사용하기도 함
-            // C++ 은 문자열 끝이 0x 00 00 으로 끝나지만 C#은 그러지 않음
-            // string len[2] -> byte[] 이렇게 ushort로 사이즈를 먼저 보내주고 스트링 쓰기
-            // 그치만.. 문자열의 길이를 구하는데 string.length를 쓰면 byte배열의 크기랑 안맞게 돼버림(ABCD는 문자열로 4바이트 byte배열로는 8바이트)
-            /// ushort nameLen = (ushort) Encoding.Unicode.GetByteCount(this.name);
-            // 이러면 되지롱~
-            /// success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), nameLen);
-            /// count += sizeof(ushort);
-            // Array.Copy(Encoding.Unicode.GetBytes(this.name), 0, segment.Array, count, nameLen);
-            // 싸늘하니까 츄라이문으로 바꾸기
-            // 먼저 꺼는 길이 파악 -> 복사 방식인데 이번엔 냅따 복사 후에 사이즈 적어주기
+            // string
             ushort nameLen = (ushort)Encoding.Unicode.GetBytes(this.name, 0, this.name.Length, segment.Array, segment.Offset + count + sizeof(ushort));
             success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), nameLen);
             count += sizeof(ushort);
             count += nameLen;
 
             success &= BitConverter.TryWriteBytes(s, count);
+
+            // skill list
+            success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), (ushort)skills.Count);
+            count += sizeof(ushort);
+
+            foreach (SkillInfo skill in skills)
+            {
+                // TODO 리스트 요소 하나하나마다 밀어넣어주기
+                success &= skill.Write(s, ref count);
+            }
 
 
             if (success == false)
@@ -130,6 +179,11 @@ namespace Server
                         PlayerInfoReq p = new PlayerInfoReq();
                         p.Read(buffer);
                         Console.WriteLine($"PlayerInfoReq: {p.playerId}, {p.name}");
+
+                        foreach(PlayerInfoReq.SkillInfo skill in p.skills)
+                        {
+                            Console.WriteLine($"Skill({skill.id}, {skill.level}, {skill.duration}");
+                        }
                     }
                     break;
 
