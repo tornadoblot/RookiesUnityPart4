@@ -1,34 +1,34 @@
 ﻿using System;
+using System.IO;
 using System.Xml;
 
 namespace PacketGenerator
 {
     class Program
     {
+        static string genPackets;
+
         static void Main(string[] args)
         {
             XmlReaderSettings settings = new XmlReaderSettings()
             {
-                // 주석과 공백 무시
                 IgnoreComments = true,
                 IgnoreWhitespace = true
             };
 
-            // 원래 다 쓰면 dispose로 나가줘야 하는데 using 써서 자동으로 해줌
             using (XmlReader r = XmlReader.Create("PDL.xml", settings))
             {
                 r.MoveToContent();
 
                 while(r.Read())
                 {
-                    // nodetype element는 태그의 시작 위치, EndElement는 끝나는 위치
                     if (r.Depth == 1 && r.NodeType == XmlNodeType.Element)
                         ParsePacket(r);
 
-                    // 타입은 r.name, 어트리뷰트는 r["name"]
-                    Console.WriteLine(r.Name + " " + r["name"]);
+                    //Console.WriteLine(r.Name + " " + r["name"]);
                 }
 
+                File.WriteAllText("GenPackets.cs", genPackets);
             }
 
             
@@ -55,13 +55,18 @@ namespace PacketGenerator
                 return;
             }
 
-            ParseMembers(r);
+            Tuple<string, string, string> t = ParseMembers(r);
+            genPackets += string.Format(PacketFormat.packetFormat, packetName, t.Item1, t.Item2, t.Item3);
         }
 
 
-        public static void ParseMembers(XmlReader r)
+        public static Tuple<string, string, string> ParseMembers(XmlReader r)
         {
             string packetName = r["name"];
+
+            string memberCode = "";
+            string readCode = "";
+            string writeCode = "";
 
             // depth는 <packet> 부분
             int depth = r.Depth + 1;
@@ -76,28 +81,118 @@ namespace PacketGenerator
                 if(string.IsNullOrEmpty(memberName))
                 {
                     Console.WriteLine("Member without name");
-                    return;
+                    return null;
                 }
+
+                if (string.IsNullOrEmpty(memberCode) == false)
+                    memberCode += Environment.NewLine;
+                if (string.IsNullOrEmpty(readCode) == false)
+                    readCode += Environment.NewLine;
+                if (string.IsNullOrEmpty(writeCode) == false)
+                    writeCode += Environment.NewLine;
 
                 string memberType = r.Name.ToLower();
                 switch(memberType)
                 {
                     case "bool":
-                    case "byte":
                     case "short":
                     case "ushort":
                     case "int":
                     case "long":
                     case "float":
                     case "double":
+                        memberCode += string.Format(PacketFormat.memberFormat, memberType, memberName);
+                        readCode += string.Format(PacketFormat.readFormat, memberName, ToMemberType(memberType), memberType);
+                        writeCode += string.Format(PacketFormat.writeFormat, memberName, memberType);
+                        break;
                     case "string":
+                        memberCode += string.Format(PacketFormat.memberFormat, memberType, memberName);
+                        readCode += string.Format(PacketFormat.readStringFormat, memberName);
+                        writeCode += string.Format(PacketFormat.writeStringFormat, memberName);
+                        break;
                     case "list":
+                        Tuple<string, string, string> t = ParseList(r);
+                        memberCode += t.Item1;
+                        readCode += t.Item2;
+                        writeCode += t.Item3;
                         break;
 
                     default:
                         break;
                 }
             }
+
+            memberCode = memberCode.Replace("\n", "\n\t");
+            readCode = readCode.Replace("\n", "\n\t\t");
+            writeCode = writeCode.Replace("\n", "\n\t\t");
+            
+
+            return new Tuple<string, string, string>(memberCode, readCode, writeCode);
         }
+
+        public static Tuple<string, string, string> ParseList(XmlReader r)
+        {
+            string listName = r["name"];
+            if (string.IsNullOrEmpty(listName))
+            {
+                Console.WriteLine("List without name");
+                return null;
+            }
+
+            Tuple<string, string, string> t = ParseMembers(r);
+
+            string memberCode = string.Format(PacketFormat.memberListFormat, FirstCharToUpper(listName), FirstCharToLower(listName),
+                t.Item1,
+                t.Item2,
+                t.Item3
+                );
+
+            string readCode = string.Format(PacketFormat.readListFormat, FirstCharToUpper(listName), FirstCharToLower(listName));
+
+            string writeCode = string.Format(PacketFormat.writeListFormat, FirstCharToUpper(listName), FirstCharToLower(listName));
+
+            return new Tuple<string, string, string>(memberCode, readCode, writeCode);
+        }
+
+        public static string ToMemberType(string memberType)
+        {
+            switch(memberType)
+            {
+                case "bool":
+                    return "ToBoolean";
+                case "short":
+                    return "ToInt16";
+                case "ushort":
+                    return "ToInt16";
+                case "int":
+                    return "ToInt32";
+                case "long":
+                    return "ToInt64";
+                case "float":
+                    return "ToSingle";
+                case "double":
+                    return "ToDouble";
+                default: return "";
+            }
+        }
+
+        public static string FirstCharToUpper(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+
+            return input[0].ToString().ToUpper() + input.Substring(1);
+
+        }
+
+        public static string FirstCharToLower(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return "";
+
+            return input[0].ToString().ToLower() + input.Substring(1);
+
+        }
+
     }
 }
