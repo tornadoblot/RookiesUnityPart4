@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Packet Defenition List -->
+
+<PDL>
+    <packet name="PlayerInfoReq">
+        <long name="playerId" />
+        <string name="name" />
+        <list name="skill">
+            <int name="id" />
+            <short name="level" />
+            <float name="duration" />
+        </list>
+        <!-- 파싱해서 사용하기 위한 이름 -->
+
+    </packet>
+
+</PDL>
