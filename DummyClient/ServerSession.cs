@@ -53,8 +53,9 @@ namespace DummyClient
         }
 
         public List<SkillInfo> skills = new List<SkillInfo>();
+
         // 복잡한 구조체 리스트는 어떻게 처리할 것인가
-            
+
 
         public PlayerInfoReq()
         {
@@ -87,7 +88,7 @@ namespace DummyClient
             skills.Clear();
             ushort skillLen = BitConverter.ToUInt16(s.Slice(count, s.Length - count));
             count += sizeof(ushort);
-            for(int i = 0; i < skillLen; i++)
+            for (int i = 0; i < skillLen; i++)
             {
                 SkillInfo skill = new SkillInfo();
                 skill.Read(s, ref count);
@@ -113,23 +114,22 @@ namespace DummyClient
             count += sizeof(long);
 
             // string
-            ushort nameLen = (ushort) Encoding.Unicode.GetBytes(this.name, 0, this.name.Length, segment.Array, segment.Offset + count + sizeof(ushort));
+            ushort nameLen = (ushort)Encoding.Unicode.GetBytes(this.name, 0, this.name.Length, segment.Array, segment.Offset + count + sizeof(ushort));
             success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), nameLen);
             count += sizeof(ushort);
             count += nameLen;
-
-            success &= BitConverter.TryWriteBytes(s, count);
 
             // skill list
             success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), (ushort)skills.Count);
             count += sizeof(ushort);
 
-            foreach(SkillInfo skill in skills)
+            foreach (SkillInfo skill in skills)
             {
                 // TODO 리스트 요소 하나하나마다 밀어넣어주기
                 success &= skill.Write(s, ref count);
             }
 
+            success &= BitConverter.TryWriteBytes(s, count);
 
             if (success == false)
                 return null;

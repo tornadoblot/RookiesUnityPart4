@@ -120,8 +120,6 @@ namespace Server
             count += sizeof(ushort);
             count += nameLen;
 
-            success &= BitConverter.TryWriteBytes(s, count);
-
             // skill list
             success &= BitConverter.TryWriteBytes(s.Slice(count, s.Length - count), (ushort)skills.Count);
             count += sizeof(ushort);
@@ -132,6 +130,7 @@ namespace Server
                 success &= skill.Write(s, ref count);
             }
 
+            success &= BitConverter.TryWriteBytes(s, count);
 
             if (success == false)
                 return null;
