@@ -19,7 +19,7 @@ namespace Server
         {
             Console.WriteLine($"OnConnected: {endPoint}");
 
-            Program.Room.Enter(this);
+            Program.Room.Push(() => Program.Room.Enter(this));
         }
 
         public override void OnDiscoonnected(EndPoint endPoint)
@@ -27,7 +27,9 @@ namespace Server
             SessionManager.Instance.Remove(this);
             if(Room != null)
             {
-                Room.Leave(this);
+                GameRoom room = Room;
+                Program.Room.Push(() => room.Leave(this));
+                // 참조는 유지
                 Room = null;
             }
 
