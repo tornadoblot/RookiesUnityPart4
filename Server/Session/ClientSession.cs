@@ -9,19 +9,28 @@ namespace Server
 {
 
 
-	// 컨텐츠 단에서 하는게 아니라 안에서 하게 만들기
-	class ClientSession : PacketSession
+    // 컨텐츠 단에서 하는게 아니라 안에서 하게 만들기
+    public class ClientSession : PacketSession
     {
+        public int SessionId { get; set; }
+        public GameRoom Room { get; set; }
+
         public override void OnConnected(EndPoint endPoint)
         {
             Console.WriteLine($"OnConnected: {endPoint}");
-            Thread.Sleep(5000);
-            DisConnect();
 
+            Program.Room.Enter(this);
         }
 
         public override void OnDiscoonnected(EndPoint endPoint)
         {
+            SessionManager.Instance.Remove(this);
+            if(Room != null)
+            {
+                Room.Leave(this);
+                Room = null;
+            }
+
             Console.WriteLine($"OnDisconnected: {endPoint}");
         }
 
