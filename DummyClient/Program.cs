@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System;
+using System.Net;
 using System.Threading;
 using ServerCore;
 
@@ -19,11 +20,21 @@ namespace DummyClient
             Thread.Sleep(1000);
             Connector connector = new Connector();
 
-            connector.Connect(endPoint, () => { return new ServerSession(); });
+            connector.Connect(endPoint, () => { return SessionManager.Instance.Generate(); }, 10);
 
 
             while (true)
             {
+                try
+                {
+                    SessionManager.Instance.SendForEach();
+                }
+                catch(Exception e)
+                {
+                    System.Console.WriteLine(e.ToString());
+                }
+
+                Thread.Sleep(250);
             }
 
 

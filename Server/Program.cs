@@ -12,7 +12,7 @@ namespace Server
 
         static void Main(string[] args)
         {
-            PacketManager.Instance.Register();
+
 
             string host = "127.0.0.1";
             IPHostEntry iPHost = Dns.GetHostEntry(host);
