@@ -8,6 +8,7 @@ namespace Server
     {
         List<ClientSession> _sessions = new List<ClientSession>();
         JobQueue _jobQueue = new JobQueue();
+        List<ArraySegment<byte>> _pendingList = new List<ArraySegment<byte>>();
 
         public void Push(Action job)
         {
@@ -22,10 +23,17 @@ namespace Server
             packet.chat = $"{chat} I am {packet.playerId}";
             ArraySegment<byte> segment = packet.Write();
 
-
-            foreach (ClientSession s in _sessions)
-                s.Send(segment);
+            _pendingList.Add(segment);
             
+        }
+
+        public void Flush()
+        {
+            foreach (ClientSession s in _sessions)
+                s.Send(_pendingList);
+
+            Console.WriteLine($"Flushed {_pendingList.Count} items");
+            _pendingList.Clear();
         }
 
 
@@ -42,6 +50,8 @@ namespace Server
             _sessions.Remove(session);
             
         }
+
+
 
     }
 }
