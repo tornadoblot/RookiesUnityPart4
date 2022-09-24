@@ -50,8 +50,5 @@ namespace Server
             _sessions.Remove(session);
             
         }
-
-
-
     }
 }
