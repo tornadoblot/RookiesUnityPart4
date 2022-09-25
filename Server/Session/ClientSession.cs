@@ -7,13 +7,14 @@ using ServerCore;
 
 namespace Server
 {
-
-
     // 컨텐츠 단에서 하는게 아니라 안에서 하게 만들기
     public class ClientSession : PacketSession
     {
         public int SessionId { get; set; }
         public GameRoom Room { get; set; }
+        public float PosX { get; set; }
+        public float PosY { get; set; }
+        public float PosZ { get; set; }
 
         public override void OnConnected(EndPoint endPoint)
         {
