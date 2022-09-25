@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using ServerCore;
 
 public class PacketManager
-    {
+{
     #region Singleton
     static PacketManager _instance = new PacketManager();
     public static PacketManager Instance { get { return _instance; } }
